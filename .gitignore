@@ -1,3 +1,7 @@
 vivado/Random_Forest/
-app/landsat/data
-app/lidar/data
+vivado/coeff/
+vivado/*.bit
+vivado/*.hwh
+vivado/*.tcl
+app/landsat/data/
+app/lidar/data/
