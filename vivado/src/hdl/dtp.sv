@@ -44,6 +44,7 @@ module dtp #(
           
     ,input  [THSH_WIDTH-1:0]                   i_attr_ram_dout
     ,output [ATTR_WIDTH-1:0]                   o_attr_ram_sel 
+    ,output                                    o_att_ram_switch
     ,input                                     i_is_att_ram_avai
     ,input                                     i_is_sample_done
 
@@ -408,6 +409,7 @@ module dtp #(
 
     assign dtp_fin = (is_ctrl_idle == {PIPE_STAGES{1'b1}}) & ~init_proc; // all pipeline stages go to IDLE and not in init process
     assign o_dtp_fin = (state_dtp==STATE_DTP_PROC) & dtp_fin;
+    assign o_att_ram_switch = (state_dtp==STATE_DTP_PROC) & dtp_fin;
 
     generate
         for(genvar i=0; i<PIPE_STAGES; i=i+1) begin
