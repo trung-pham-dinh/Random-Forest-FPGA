@@ -232,7 +232,7 @@ module dtp #(
     .rstb (bram_rst_ps),    // input wire rstb
     .enb  (bram_en_ps),      // input wire enb
     .web  (|bram_we_ps),      // input wire [0 : 0] web
-    .addrb(bram_addr_ps[BRAM_AWIDTH-1:0]),  // input wire [13 : 0] addrb
+    .addrb(bram_addr_ps[BRAM_AWIDTH-1:3]),  // input wire [13 : 0] addrb
     .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [39 : 0] dinb
     .doutb(bram_dout_ps_temp)  // output wire [39 : 0] doutb
     );
@@ -340,7 +340,7 @@ module dtp #(
         );
 
 //----------------------------------------------------------------------------------------
-// ADDR GENERATE
+// COMPARE
 //----------------------------------------------------------------------------------------
 
 
