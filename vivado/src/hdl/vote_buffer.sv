@@ -1,11 +1,12 @@
 `timescale 1ns/1ps
 
 module vote_buffer #(
-     parameter N_LABELS  = 10  // maximum N_LABELS
+     parameter N_LABELS        = 10  // maximum N_LABELS
     ,parameter N_LABELS_WIDTH  = 4  // maximum N_LABELS bit
-    ,parameter RES_WIDTH = 16
-    ,parameter BRAM_AWIDTH = 14
-    ,parameter BRAM_DWIDTH = 16
+    ,parameter RES_WIDTH       = 16
+    ,parameter BRAM_AWIDTH     = 14
+    ,parameter BRAM_DWIDTH     = 16
+    ,localparam BRAM_AWIDTH_32 = BRAM_AWIDTH+2
 ) (
      input                           clk
     ,input                           rst_n
@@ -23,17 +24,17 @@ module vote_buffer #(
 
     
     // Uncomment the following to set interface specific parameter on the bus interface.
-    // (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL,MEM_ECC NONE,MEM_WIDTH 64,MEM_SIZE 131072,READ_WRITE_MODE READ_WRITE" *)
+    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL,MEM_ECC NONE,MEM_WIDTH 32,MEM_SIZE 65536,READ_WRITE_MODE READ_WRITE" *)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS EN" *)
     input bram_en_ps, // Chip Enable Signal (optional)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS DOUT" *)
-    output [63 : 0] bram_dout_ps, // Data Out Bus (optional)
+    output [31 : 0] bram_dout_ps, // Data Out Bus (optional)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS DIN" *)
-    input [63 : 0]  bram_din_ps, // Data In Bus (optional)
+    input [31 : 0]  bram_din_ps, // Data In Bus (optional)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS WE" *)
-    input [7 : 0]   bram_we_ps, // Byte Enables (optional)
+    input [3 : 0]   bram_we_ps, // Byte Enables (optional)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS ADDR" *)
-    input [16 : 0]  bram_addr_ps, // Address Signal (required)
+    input [BRAM_AWIDTH_32-1 : 0]  bram_addr_ps, // Address Signal (required)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS CLK" *)
     input bram_clk_ps, // Clock Signal (required)
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT_PS RST" *)
@@ -69,6 +70,7 @@ module vote_buffer #(
 
 
     logic                            read_bram_en;
+    logic                            read_bram_rst;
     logic [BRAM_AWIDTH-1:0]          read_bram_addr;
 
     logic                            write_bram_we;
@@ -77,7 +79,6 @@ module vote_buffer #(
 
     logic                            clear_bram_we;
     logic [BRAM_AWIDTH-1:0]          clear_bram_addr;
-    logic [BRAM_DWIDTH-1:0]          clear_bram_din;
 
     logic [N_LABELS_WIDTH-1:0]       reg_idx;
 //----------------------------------------------------------------------------------------
@@ -215,18 +216,19 @@ module vote_buffer #(
 //----------------------------------------------------------------------------------------
 // BRAM 
 //----------------------------------------------------------------------------------------
+    assign read_bram_rst  = (i_is_ps_read)? bram_rst_ps : 1'b0;
     assign read_bram_en   = (i_is_ps_read)? bram_en_ps : 1'b1;
-    assign read_bram_addr = (i_is_ps_read)? BRAM_AWIDTH'(bram_addr_ps) : read_addr;
-    assign bram_dout_ps = 64'(read_bram_dout);
+    assign read_bram_addr = (i_is_ps_read)? bram_addr_ps[BRAM_AWIDTH_32-1 : 2] : read_addr;
+    assign bram_dout_ps   = 32'(read_bram_dout);
 
-    assign write_bram_we = (i_is_ps_read)? clear_bram_we : write_addr_vld;
-    assign write_bram_addr = (i_is_ps_read)? clear_bram_addr : write_addr;
-    assign write_bram_din = (i_is_ps_read)? clear_bram_din : write_res;
+    assign write_bram_we   = (i_is_ps_read)? clear_bram_we     : write_addr_vld;
+    assign write_bram_addr = (i_is_ps_read)? clear_bram_addr   : write_addr;
+    assign write_bram_din  = (i_is_ps_read)? BRAM_DWIDTH'('d0) : write_res;
 
     vote_bram vote_bram_inst (
         // READ
         .clka (clk           ),  // input wire clka
-        .rsta (1'b0          ),  // input wire rsta
+        .rsta (read_bram_rst ),  // input wire rsta
         .ena  (read_bram_en  ),  // input wire ena
         .wea  (1'b0          ),  // input wire [0 : 0] wea
         .addra(read_bram_addr),  // input wire [13 : 0] addra
@@ -280,6 +282,27 @@ module vote_buffer #(
         .in_data(read_addr_vld), 
         .out_data(),
         .out_data_lst(write_addr_vld)
+        );
+
+//----------------------------------------------------------------------------------------
+// Clear on Read
+//----------------------------------------------------------------------------------------
+
+    pipeline #(.STAGES(2), .DWIDTH(BRAM_AWIDTH), .RST_VAL(BRAM_AWIDTH'('d0))) 
+        clear_addr_pipe_stage
+        (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(bram_addr_ps[BRAM_AWIDTH_32-1 : 2]), 
+        .out_data(),
+        .out_data_lst(clear_bram_addr)
+        );
+    pipeline #(.STAGES(2), .DWIDTH(1), .RST_VAL(1'('d0))) 
+        clear_bram_we_pipe_stage
+        (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(bram_en_ps), 
+        .out_data(),
+        .out_data_lst(clear_bram_we)
         );
 
 endmodule
