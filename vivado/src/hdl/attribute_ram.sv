@@ -226,23 +226,33 @@ module attribute_ram #(
 //use_done                 ___________________________|       |___________
 
     assign pop_start = (state_fifo==STATE_FIFO_RST || state_fifo==STATE_FIFO_DONE) & !is_att_ram_avai_read[cur_att_ram_write];
+    
     always_ff@(posedge clk) begin
         if(~rst_n) begin
-            pop_amount <= ATTR_ABIT'('d0);
             o_fifo_pop <= 1'b0;
         end
         else begin
             if(pop_start) begin
-                pop_amount <= ATTR_ABIT'('d0);
-                o_fifo_pop <= 1;
+                o_fifo_pop <= 1'b1;
             end
-            else if ((state_fifo==STATE_FIFO_FILL) && (pop_amount!=POP_AMOUNT-1)) begin
-                pop_amount <= pop_amount + 1;
-                o_fifo_pop <= 1;
+            else if (pop_amount == POP_AMOUNT-1) begin
+                o_fifo_pop <= 1'b0;
             end
             else begin
-                pop_amount <= pop_amount;
-                o_fifo_pop <= 0;
+                o_fifo_pop <= o_fifo_pop;
+            end
+        end
+    end
+    always_ff@(posedge clk) begin
+        if(~rst_n) begin
+            pop_amount <= ATTR_ABIT'('d0);
+        end
+        else begin
+            if(o_fifo_pop) begin
+                pop_amount <= pop_amount + ATTR_ABIT'('d1);
+            end
+            else begin
+                pop_amount <= ATTR_ABIT'('d0);
             end
         end
     end
