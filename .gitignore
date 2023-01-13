@@ -6,3 +6,4 @@ vivado/*.tcl
 app/landsat/data/
 app/lidar/data/
 app/Random_Forest
+app/tree_ram_gen/.ipynb_checkpoints/
