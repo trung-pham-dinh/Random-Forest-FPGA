@@ -15,9 +15,11 @@
 	)
 	(
 		// Users to add ports here
-		output [C_S_AXI_DATA_WIDTH-1:0] start_reg,
-		output [C_S_AXI_DATA_WIDTH-1:0] end_reg, 
-        input [C_S_AXI_DATA_WIDTH-1:0]  done_reg,
+		output [C_S_AXI_DATA_WIDTH-1:0] ctrl_reg,      // reg0
+		input  [C_S_AXI_DATA_WIDTH-1:0] stt_reg,       // reg1
+        output [C_S_AXI_DATA_WIDTH-1:0] samp_thsh_reg, // reg2
+		output [C_S_AXI_DATA_WIDTH-1:0] n_attrs_reg,   // reg3
+
 		// User ports ends
 		// Do not modify the ports beyond this line
 
@@ -653,8 +655,8 @@
 	      // Address decoding for reading registers
 	      case ( axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] )
 	        5'h00   : reg_data_out <= slv_reg0;
-	        5'h01   : reg_data_out <= slv_reg1;
-	        5'h02   : reg_data_out <= done_reg;
+	        5'h01   : reg_data_out <= stt_reg;
+	        5'h02   : reg_data_out <= slv_reg2;
 	        5'h03   : reg_data_out <= slv_reg3;
 	        5'h04   : reg_data_out <= slv_reg4;
 	        5'h05   : reg_data_out <= slv_reg5;
@@ -708,8 +710,9 @@
 	end    
 
 	// Add user logic here
-    assign start_reg = slv_reg0;
-    assign end_reg   = slv_reg1;
+    assign ctrl_reg 		= slv_reg0;
+	assign samp_thsh_reg 	= slv_reg2;
+	assign n_attrs_reg		= slv_reg3;
 	// User logic ends
 
 	endmodule
