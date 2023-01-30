@@ -300,7 +300,7 @@ module vote_buffer #(
         clear_bram_we_pipe_stage
         (
         .clk(clk), .rst_n(rst_n), 
-        .in_data(bram_en_ps), 
+        .in_data(bram_en_ps & !(|bram_we_ps)), 
         .out_data(),
         .out_data_lst(clear_bram_we)
         );

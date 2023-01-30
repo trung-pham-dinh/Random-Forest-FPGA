@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module sample_fifo_paper #(
      parameter WIDTH = 16
     ,parameter DEPTH_BIT = 13
@@ -42,7 +44,7 @@ module sample_fifo_paper #(
 // MEMORY
 //----------------------------------------------------------------------------------------
 
-    logic [WIDTH-1:0] bram_dout_ps_temp;
+    // logic [WIDTH-1:0] bram_dout_ps_temp;
 
     sample_bram sample_bram_inst0 (
     .clka (clk        ),    // input wire clka
@@ -53,15 +55,15 @@ module sample_fifo_paper #(
     .dina (WIDTH'('d0)),    // input wire [15 : 0] dina
     .douta(bram_dout  ),    // output wire [15 : 0] douta
 
-    .clkb (bram_clk_ps ),    // input wire clkb
-    .rstb (bram_rst_ps ),    // input wire rstb
-    .enb  (bram_en_ps  ),    // input wire enb
-    .web  (|bram_we_ps ),    // input wire [0 : 0] web
+    .clkb (bram_clk_ps                    ),    // input wire clkb
+    .rstb (bram_rst_ps                    ),    // input wire rstb
+    .enb  (bram_en_ps                     ),    // input wire enb
+    .web  (|bram_we_ps                    ),    // input wire [0 : 0] web
     .addrb(bram_addr_ps[DEPTH_BIT+2-1 : 2]),    // input wire [12 : 0] addrb
-    .dinb (bram_din_ps[WIDTH-1:0]),    // input wire [15 : 0] dinb
-    .doutb(bram_dout_ps_temp)     // output wire [15 : 0] doutb
+    .dinb (bram_din_ps[WIDTH-1:0]         ),    // input wire [15 : 0] dinb
+    .doutb(bram_dout_ps[WIDTH-1:0]        )     // output wire [15 : 0] doutb
     );
-    assign bram_dout_ps = 32'(bram_dout_ps_temp);
+    // assign bram_dout_ps = 32'(bram_dout_ps_temp);
 
     always_ff @( posedge clk ) begin
         if(!rst_n)

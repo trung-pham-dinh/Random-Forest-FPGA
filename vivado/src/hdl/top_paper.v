@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module top_paper #(
      localparam DTP_PIPE_STAGES      = 5
     ,localparam ATTR_WIDTH           = 16
@@ -6,14 +8,15 @@ module top_paper #(
     
     ,localparam RES_WIDTH            = 16
     
-    // ,localparam STATE_CTRL_WIDTH     = 2
-    // ,localparam STATE_DTP_WIDTH      = 2
-    // ,localparam STATE_FIFO_WIDTH     = 2
+     ,localparam STATE_CTRL_WIDTH     = 2 // SIMULATION
+     ,localparam STATE_DTP_WIDTH      = 2
+     ,localparam STATE_FIFO_WIDTH     = 2
 
     ,localparam N_DTPS               = 5
     ,localparam POP_AMOUNT           = 8 // unit: attributes/sample
 
     ,localparam SAMPLE_FIFO_DEPTH_BIT= 13
+    ,localparam VOTE_DEPTH_BIT       = 10
 //--------------------------------------------
     ,localparam integer C_S_AXI_DATA_WIDTH  = 32
     ,localparam integer C_S_AXI_ADDR_WIDTH	= 7
@@ -128,6 +131,23 @@ module top_paper #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 DTP_BRAM_PORT_4 RST" *)
     input                           bram_rst_4, // Reset Signal (required)
 
+// VOTE BUFFER BRAM----------------------------------------------------------------------     
+    (* X_INTERFACE_PARAMETER = "MASTER_TYPE BRAM_CTRL,MEM_ECC NONE,MEM_WIDTH 32,MEM_SIZE 4096,READ_WRITE_MODE READ_WRITE" *)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT EN" *)
+    input                                 bram_en_vote, // Chip Enable Signal (optional)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT DOUT" *)
+    output [31 : 0]                       bram_dout_vote, // Data Out Bus (optional)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT DIN" *)
+    input [31 : 0]                        bram_din_vote, // Data In Bus (optional)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT WE" *)
+    input [3 : 0]                         bram_we_vote, // Byte Enables (optional)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT ADDR" *)
+    input [VOTE_DEPTH_BIT+2-1 : 0]        bram_addr_vote, // Address Signal (required)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT CLK" *)
+    input                                 bram_clk_vote, // Clock Signal (required)
+    (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 VOTE_BRAM_PORT RST" *)
+    input                                 bram_rst_vote, // Reset Signal (required)
+
 
 // REG_BANK_AXI----------------------------------------------------------------------
     // Global Clock Signal
@@ -224,8 +244,8 @@ module top_paper #(
 //---------------------------------------------------------------------------
     wire                             dtp_tree_ram_is_ready;
 
-    // wire                             res_fifo_we [0:N_DTPS-1];
-    // wire [RES_WIDTH-1:0]             res_fifo_dout [0:N_DTPS-1];
+    wire                             res_fifo_we [0:N_DTPS-1];
+    wire [RES_WIDTH-1:0]             res_fifo_dout [0:N_DTPS-1];
 
     wire                             dtp_start;
     wire                             dtp_end;
@@ -233,6 +253,8 @@ module top_paper #(
 //----------------------------------------------------------------------------------------
     wire                             rst_core;
     wire                             start_core;
+//----------------------------------------------------------------------------------------
+    wire [N_DTPS-1:0]                vote_onehot_sel;
 
 //----------------------------------------------------------------------------------------
 // Simulation logic
@@ -245,6 +267,11 @@ module top_paper #(
     // reg                             sample_fifo_thsh_vld_sim = 1;
     // reg [ATTR_SEL_WIDTH-1:0]        attr_ram_pop_amount_sim = POP_AMOUNT-1;
     // reg                             dtp_tree_ram_is_ready_sim = 1;
+    // reg [N_DTPS-1:0]                vote_onehot_sel_sim = 5'b00001;
+
+    // wire                            res_vld_mux_sim;
+    // wire [RES_WIDTH-1:0]            res_val_mux_sim;
+    // wire [VOTE_DEPTH_BIT-1:0]       waddr_sim;
 
 
     // wire [DTP_BRAM_AWIDTH*DTP_PIPE_STAGES-1:0]  bram_addr_pipe_sim [0:N_DTPS-1];
@@ -266,11 +293,11 @@ module top_paper #(
     // assign rst_n                = rst_n_sim;
     // assign start_core           = start_core_sim;
     // assign rst_core             = rst_core_sim;
-    // assign sample_fifo_thsh_val = sample_fifo_thsh_val_sim;
     // assign sample_fifo_thsh_vld = sample_fifo_thsh_vld_sim;
     // assign dtp_tree_ram_is_ready= dtp_tree_ram_is_ready_sim;
+    // assign sample_fifo_thsh_val = sample_fifo_thsh_val_sim;
     // assign attr_ram_pop_amount  = attr_ram_pop_amount_sim;
-    
+    // assign vote_onehot_sel      = vote_onehot_sel_sim;
 
     // generate
     //     for(genvar p=0; p<DTP_PIPE_STAGES; p=p+1) begin
@@ -343,12 +370,12 @@ module top_paper #(
         .bram_addr_ps(bram_addr_samp       ),
         .bram_clk_ps (bram_clk_samp        ),
         .bram_rst_ps (bram_rst_samp        )
-        // .bram_en_ps  (0),
+        // .bram_en_ps  (0), // SIMULATION
         // .bram_dout_ps( ),
         // .bram_din_ps (0),
         // .bram_we_ps  (0),
         // .bram_addr_ps(0),
-        // .bram_clk_ps (0),
+        // .bram_clk_ps (clk),
         // .bram_rst_ps (0)
 
     );
@@ -396,10 +423,8 @@ module top_paper #(
         .i_tree_ram_ready    (dtp_tree_ram_is_ready                            ),  
         
         .i_res_fifo_is_full  (1'b0                                             ),    
-        // .o_res_fifo_we       (res_fifo_we[0]                                   ),
-        // .o_res_fifo_dout     (res_fifo_dout[0]                                 ),
-        .o_res_fifo_we       (),
-        .o_res_fifo_dout     (),    
+        .o_res_fifo_we       (res_fifo_we[0]                                   ),
+        .o_res_fifo_dout     (res_fifo_dout[0]                                 ),
                                 
         .i_dtp_start         (dtp_start                                        ),    
         .i_dtp_end           (dtp_end                                          ),    
@@ -412,12 +437,12 @@ module top_paper #(
         .bram_addr_ps        (bram_addr_0                              ),  
         .bram_clk_ps         (bram_clk_0                               ),  
         .bram_rst_ps         (bram_rst_0                               )
-        // .bram_en_ps          (0                              ),
+        // .bram_en_ps          (0                              ), // SIMULATION
         // .bram_dout_ps        (                               ),
         // .bram_din_ps         (0                              ),
         // .bram_we_ps          (0                              ),
         // .bram_addr_ps        (0                              ),
-        // .bram_clk_ps         (0                              ),
+        // .bram_clk_ps         (clk                              ),
         // .bram_rst_ps         (0                              ),
         // .bram_addr_pipe_sim  (bram_addr_pipe_sim[0]          ),
         // .state_ctrl_pipe_sim (state_ctrl_pipe_sim[0]         )
@@ -438,10 +463,8 @@ module top_paper #(
         .i_tree_ram_ready    (dtp_tree_ram_is_ready                            ),  
         
         .i_res_fifo_is_full  (1'b0                                             ),    
-        // .o_res_fifo_we       (res_fifo_we[1]                                   ),
-        // .o_res_fifo_dout     (res_fifo_dout[1]                                 ), 
-        .o_res_fifo_we       (),
-        .o_res_fifo_dout     (),   
+        .o_res_fifo_we       (res_fifo_we[1]                                   ),
+        .o_res_fifo_dout     (res_fifo_dout[1]                                 ), 
                                 
         .i_dtp_start         (dtp_start                                        ),    
         .i_dtp_end           (dtp_end                                          ),    
@@ -454,12 +477,12 @@ module top_paper #(
         .bram_addr_ps        (bram_addr_1                              ),
         .bram_clk_ps         (bram_clk_1                               ),
         .bram_rst_ps         (bram_rst_1                               )
-        // .bram_en_ps          (0                              ),
+        // .bram_en_ps          (0                              ), // SIMULATION
         // .bram_dout_ps        (                               ),
         // .bram_din_ps         (0                              ),
         // .bram_we_ps          (0                              ),
         // .bram_addr_ps        (0                              ),
-        // .bram_clk_ps         (0                              ),
+        // .bram_clk_ps         (clk                              ),
         // .bram_rst_ps         (0                              ),
         // .bram_addr_pipe_sim  (bram_addr_pipe_sim[1]          ),
         // .state_ctrl_pipe_sim (state_ctrl_pipe_sim[1]         )
@@ -480,10 +503,8 @@ module top_paper #(
         .i_tree_ram_ready    (dtp_tree_ram_is_ready                            ),  
         
         .i_res_fifo_is_full  (1'b0                                             ),    
-        // .o_res_fifo_we       (res_fifo_we[2]                                   ),
-        // .o_res_fifo_dout     (res_fifo_dout[2]                                 ), 
-        .o_res_fifo_we       (),
-        .o_res_fifo_dout     (),   
+        .o_res_fifo_we       (res_fifo_we[2]                                   ),
+        .o_res_fifo_dout     (res_fifo_dout[2]                                 ), 
                                 
         .i_dtp_start         (dtp_start                                        ),    
         .i_dtp_end           (dtp_end                                          ),    
@@ -496,12 +517,12 @@ module top_paper #(
         .bram_addr_ps        (bram_addr_2                              ),
         .bram_clk_ps         (bram_clk_2                               ),
         .bram_rst_ps         (bram_rst_2                               )
-        // .bram_en_ps          (0                              ),
+        // .bram_en_ps          (0                              ), // SIMULATION
         // .bram_dout_ps        (                               ),
         // .bram_din_ps         (0                              ),
         // .bram_we_ps          (0                              ),
         // .bram_addr_ps        (0                              ),
-        // .bram_clk_ps         (0                              ),
+        // .bram_clk_ps         (clk                              ),
         // .bram_rst_ps         (0                              ),
         // .bram_addr_pipe_sim  (bram_addr_pipe_sim[2]          ),
         // .state_ctrl_pipe_sim (state_ctrl_pipe_sim[2]         )
@@ -522,10 +543,8 @@ module top_paper #(
         .i_tree_ram_ready    (dtp_tree_ram_is_ready                            ),  
         
         .i_res_fifo_is_full  (1'b0                                             ),    
-        // .o_res_fifo_we       (res_fifo_we[3]                                   ),
-        // .o_res_fifo_dout     (res_fifo_dout[3]                                 ),  
-        .o_res_fifo_we       (),
-        .o_res_fifo_dout     (),  
+        .o_res_fifo_we       (res_fifo_we[3]                                   ),
+        .o_res_fifo_dout     (res_fifo_dout[3]                                 ),   
                                 
         .i_dtp_start         (dtp_start                                        ),    
         .i_dtp_end           (dtp_end                                          ),    
@@ -538,12 +557,12 @@ module top_paper #(
         .bram_addr_ps        (bram_addr_3                              ),
         .bram_clk_ps         (bram_clk_3                               ),
         .bram_rst_ps         (bram_rst_3                               )
-        // .bram_en_ps          (0                              ),
+        // .bram_en_ps          (0                              ), // SIMULATION
         // .bram_dout_ps        (                               ),
         // .bram_din_ps         (0                              ),
         // .bram_we_ps          (0                              ),
         // .bram_addr_ps        (0                              ),
-        // .bram_clk_ps         (0                              ),
+        // .bram_clk_ps         (clk                              ),
         // .bram_rst_ps         (0                              ),
         // .bram_addr_pipe_sim  (bram_addr_pipe_sim[3]          ),
         // .state_ctrl_pipe_sim (state_ctrl_pipe_sim[3]         )
@@ -564,10 +583,8 @@ module top_paper #(
         .i_tree_ram_ready    (dtp_tree_ram_is_ready                            ),  
         
         .i_res_fifo_is_full  (1'b0                                             ),    
-        // .o_res_fifo_we       (res_fifo_we[4]                                   ),
-        // .o_res_fifo_dout     (res_fifo_dout[4]                                 ),
-        .o_res_fifo_we       (),
-        .o_res_fifo_dout     (),    
+        .o_res_fifo_we       (res_fifo_we[4]                                   ),
+        .o_res_fifo_dout     (res_fifo_dout[4]                                 ),   
                                 
         .i_dtp_start         (dtp_start                                        ),    
         .i_dtp_end           (dtp_end                                          ),    
@@ -580,12 +597,12 @@ module top_paper #(
         .bram_addr_ps        (bram_addr_4                              ),
         .bram_clk_ps         (bram_clk_4                               ),
         .bram_rst_ps         (bram_rst_4                               )
-        // .bram_en_ps          (0                              ),
+        // .bram_en_ps          (0                              ), // SIMULATION
         // .bram_dout_ps        (                               ),
         // .bram_din_ps         (0                              ),
         // .bram_we_ps          (0                              ),
         // .bram_addr_ps        (0                              ),
-        // .bram_clk_ps         (0                              ),
+        // .bram_clk_ps         (clk                              ),
         // .bram_rst_ps         (0                              ),
         // .bram_addr_pipe_sim  (bram_addr_pipe_sim[4]          ),
         // .state_ctrl_pipe_sim (state_ctrl_pipe_sim[4]         )
@@ -599,39 +616,45 @@ module top_paper #(
     wire [C_S_AXI_DATA_WIDTH-1:0] stt_reg;
     wire [C_S_AXI_DATA_WIDTH-1:0] samp_thsh_reg;
     wire [C_S_AXI_DATA_WIDTH-1:0] n_attrs_reg;
+    wire [C_S_AXI_DATA_WIDTH-1:0] vote_reg;
 
     reg dtp_is_fin_reg;
     reg sample_fifo_thsh_done_reg;
 
     // Control register
     edge_detector #(.IS_POS(1)) 
-        (
-        .clk  (clk),  
-        .rst_n(rst_n),  
-        .din  (ctrl_reg[CTRL_REG_START_CORE_IDX]),  
-        .eout (start_core)
-        );
+    (
+    .clk  (clk),  
+    .rst_n(rst_n),  
+    .din  (ctrl_reg[CTRL_REG_START_CORE_IDX]),  
+    .eout (start_core)
+    );
+
     edge_detector #(.IS_POS(1)) 
-        (
-        .clk  (clk),  
-        .rst_n(rst_n),  
-        .din  (ctrl_reg[CTRL_REG_END_CORE_IDX]),  
-        .eout (rst_core)
-        );
+    (
+    .clk  (clk),  
+    .rst_n(rst_n),  
+    .din  (ctrl_reg[CTRL_REG_END_CORE_IDX]),  
+    .eout (rst_core)
+    );
+
     edge_detector #(.IS_POS(1)) 
-        (
-        .clk  (clk),  
-        .rst_n(rst_n),  
-        .din  (ctrl_reg[CTRL_REG_THSH_VLD_IDX]),  
-        .eout (sample_fifo_thsh_vld)
-        );
+    (
+    .clk  (clk),  
+    .rst_n(rst_n),  
+    .din  (ctrl_reg[CTRL_REG_THSH_VLD_IDX]),  
+    .eout (sample_fifo_thsh_vld)
+    );
+
     assign dtp_tree_ram_is_ready = ctrl_reg[CTRL_REG_TREE_RAM_READY_IDX];
+
 
     // Sample FIFO threshold register
     assign sample_fifo_thsh_val = samp_thsh_reg[SAMPLE_FIFO_DEPTH_BIT-1:0];
 
     // Number of attributes register
     assign attr_ram_pop_amount = n_attrs_reg[ATTR_SEL_WIDTH-1:0];
+
 
     // Status register
     assign stt_reg[STT_REG_DTP_FIN_IDX]    = dtp_is_fin_reg;
@@ -666,6 +689,8 @@ module top_paper #(
         end
     end
 
+    // VOTE REG
+    assign vote_onehot_sel = vote_reg[N_DTPS-1:0];
 
 
     regs_bank #(
@@ -676,6 +701,7 @@ module top_paper #(
             .stt_reg        (stt_reg      ),// reg1
             .samp_thsh_reg  (samp_thsh_reg),// reg2
             .n_attrs_reg    (n_attrs_reg  ),// reg3
+            .vote_reg       (vote_reg     ),// reg4
 
 
             .S_AXI_ACLK     (S_AXI_ACLK   ),
@@ -700,6 +726,46 @@ module top_paper #(
             .S_AXI_RVALID   (S_AXI_RVALID ),
             .S_AXI_RREADY   (S_AXI_RREADY )
         );
+
+
+//----------------------------------------------------------------------------------------
+// VOTE BUFFER
+//----------------------------------------------------------------------------------------
+
+    vote_buffer_paper #(
+        .N_DTPS   (N_DTPS        ),
+        .RES_WIDTH(RES_WIDTH     ),
+        .DEPTH_BIT(VOTE_DEPTH_BIT)
+    ) vote_inst_0 (
+        .clk          (clk),  
+        .rst_n        (rst_n),  
+        .buffer_rst   (rst_core),  
+
+        .onehot_sel   (vote_onehot_sel),  
+        .res_vld      ({res_fifo_we[4],res_fifo_we[3],res_fifo_we[2],res_fifo_we[1],res_fifo_we[0]}),  
+//        .res_val      ({res_fifo_dout[4],res_fifo_dout[3],res_fifo_dout[2],res_fifo_dout[1],res_fifo_dout[0]}),
+        .res_val      ({{RES_WIDTH{1'b1}},{RES_WIDTH{1'b1}},{RES_WIDTH{1'b1}},{RES_WIDTH{1'b1}},{RES_WIDTH{1'b1}}}),  
+
+       .bram_en_ps   (bram_en_vote  ),
+       .bram_dout_ps (bram_dout_vote),
+       .bram_din_ps  (bram_din_vote ),
+       .bram_we_ps   (bram_we_vote  ),
+       .bram_addr_ps (bram_addr_vote),
+       .bram_clk_ps  (bram_clk_vote ),
+       .bram_rst_ps  (bram_rst_vote )
+        // .res_vld_mux_sim(res_vld_mux_sim), // SIMULATION
+        // .res_val_mux_sim(res_val_mux_sim),
+        // .waddr_sim      (waddr_sim      ),
+
+        // .bram_en_ps   (0  ),
+        // .bram_dout_ps (),
+        // .bram_din_ps  (0 ),
+        // .bram_we_ps   (0  ),
+        // .bram_addr_ps (0),
+        // .bram_clk_ps  (clk ),
+        // .bram_rst_ps  (0 )
+
+    ); 
 
 
 endmodule

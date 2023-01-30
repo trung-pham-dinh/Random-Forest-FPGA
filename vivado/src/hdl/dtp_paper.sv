@@ -112,7 +112,7 @@ module dtp_paper #(
 
     logic [BRAM_AWIDTH-1:0]             bram_addr, hold_addr,bram_addr_add_1,bram_addr_add_1_pipe2,bram_addr_upd,absolute_addr;
     logic [BRAM_AWIDTH*PIPE_STAGES-1:0] bram_addr_pipe;
-    logic [BRAM_DWIDTH-1:0]             bram_dout_ps_temp;
+    // logic [BRAM_DWIDTH-1:0]             bram_dout_ps_temp;
 
     logic [BRAM_DWIDTH-1:0]             tree_ram_dout,tree_ram_dout_pipe2;
     logic [THSH_WIDTH-1:0]              attr_ram_dout_pipe2;
@@ -232,7 +232,7 @@ module dtp_paper #(
             .web  (|bram_we_ps),      // input wire [0 : 0] web
             .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
             .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps_temp)  // output wire [31 : 0] doutb
+            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
             );
         end
         else if(DTP_IDX==1) begin
@@ -253,7 +253,7 @@ module dtp_paper #(
             .web  (|bram_we_ps),      // input wire [0 : 0] web
             .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
             .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps_temp)  // output wire [31 : 0] doutb
+            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
             );
         end
         else if(DTP_IDX==2) begin
@@ -274,7 +274,7 @@ module dtp_paper #(
             .web  (|bram_we_ps),      // input wire [0 : 0] web
             .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
             .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps_temp)  // output wire [31 : 0] doutb
+            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
             );
         end
         else if(DTP_IDX==3) begin
@@ -295,7 +295,7 @@ module dtp_paper #(
             .web  (|bram_we_ps),      // input wire [0 : 0] web
             .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
             .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps_temp)  // output wire [31 : 0] doutb
+            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
             );
         end
         else if(DTP_IDX==4) begin
@@ -316,19 +316,20 @@ module dtp_paper #(
             .web  (|bram_we_ps),      // input wire [0 : 0] web
             .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
             .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps_temp)  // output wire [31 : 0] doutb
+            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
             );
         end
     endgenerate
 
-    assign bram_dout_ps = 32'(bram_dout_ps_temp);
+    // assign bram_dout_ps = 32'(bram_dout_ps_temp);
 
 //----------------------------------------------------------------------------------------
 // ATTRIBUTE ACCESS
 //---------------------------------------------------------------------------------------- 
     assign o_attr_ram_sel = tree_ram_dout[ATTR_IDX +: ATTR_WIDTH];
     
-    assign o_res_fifo_we = (state_ctrl_pre == STATE_CTRL_INTERNAL) & (tree_ram_dout[LEAF_IDX] & !i_res_fifo_is_full);
+    // assign o_res_fifo_we = (state_ctrl_pre == STATE_CTRL_INTERNAL) & (tree_ram_dout[LEAF_IDX] & !i_res_fifo_is_full);
+    assign o_res_fifo_we = (state_dtp==STATE_DTP_PROC) & dtp_fin;
     assign o_res_fifo_dout = tree_ram_dout[RES_IDX +: RES_WIDTH];
     // assign o_res_fifo_dout = 16'(bram_addr_pipe[(TREE_RAM_STAGES-1)*BRAM_AWIDTH +:BRAM_AWIDTH]); // for debug
     
