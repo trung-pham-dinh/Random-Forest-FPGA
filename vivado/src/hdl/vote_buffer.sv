@@ -1,3 +1,6 @@
+// In classification, least cycles between two valid signals is 5
+// In regression, least cycles between two valid signals is 3 (same vote slot), 1 (different vote slot)
+
 `timescale 1ns/1ps
 
 module vote_buffer #(
@@ -11,10 +14,11 @@ module vote_buffer #(
      input                           clk
     ,input                           rst_n
 
+    ,input                           i_vote_slot_rst
+
     ,input [N_LABELS_WIDTH-1:0]      i_n_labels // current n_labels
     ,input                           i_is_clf
     ,input                           i_is_ps_read
-    ,input [BRAM_AWIDTH-1:0]         i_vote_slot
 
     // input classification label result
     ,input [N_LABELS*RES_WIDTH-1:0]  i_clf_accum
@@ -49,15 +53,17 @@ module vote_buffer #(
     ,output [BRAM_AWIDTH-1:0]    read_addr_sim     
     ,output                      read_addr_vld_sim 
     ,output [RES_WIDTH-1:0]      accum_res_pipe_sim
-    ,output [BRAM_DWIDTH-1:0]    write_res_sim     
-    ,output [BRAM_AWIDTH-1:0]    write_addr_sim    
-    ,output                      write_addr_vld_sim
+    ,output [BRAM_DWIDTH-1:0]    write_bram_din_sim     
+    ,output [BRAM_AWIDTH-1:0]    write_bram_addr_sim    
+    ,output                      write_bram_we_sim
     ,output [BRAM_AWIDTH-1:0]    read_bram_addr_sim
 );
     localparam MUL_ADD_N_STAGES      = 3;
-    localparam READ_BRAM_STAGES      = 2;
+    localparam READ_BRAM_STAGES      = 1;
     localparam ADDER_STAGES          = 2;
 
+    logic                            accum_vld;
+    logic [BRAM_AWIDTH-1:0]          vote_slot_reg,vote_slot;
     logic [N_LABELS_WIDTH-1:0]       clf_label,clf_label_pipe;
     logic [RES_WIDTH-1:0]            clf_rgs_res,clf_res,accum_res,accum_res_pipe;
 
@@ -79,6 +85,7 @@ module vote_buffer #(
 
     logic                            clear_bram_we;
     logic [BRAM_AWIDTH-1:0]          clear_bram_addr;
+    logic                            is_ps_read_pipe;
 
     logic [N_LABELS_WIDTH-1:0]       reg_idx;
 //----------------------------------------------------------------------------------------
@@ -93,21 +100,44 @@ module vote_buffer #(
     assign read_addr_sim      = read_addr;
     assign read_addr_vld_sim  = read_addr_vld;
     assign accum_res_pipe_sim = accum_res_pipe;
-    assign write_res_sim      = write_res;
-    assign write_addr_sim     = write_addr;
-    assign write_addr_vld_sim = write_addr_vld;
+    assign write_bram_din_sim = write_bram_din;
+    assign write_bram_addr_sim= write_bram_addr;
+    assign write_bram_we_sim  = write_bram_we;
     assign read_bram_addr_sim = read_bram_addr;
 
 //----------------------------------------------------------------------------------------
 // Scan result registers
 //----------------------------------------------------------------------------------------
 
+    counter_with_lat #(
+        .WIDTH(BRAM_AWIDTH)
+    ) counter_inst(
+        .clk         (clk            ),   
+        .rst_n       (rst_n          ),   
+        .inc         (i_accum_vld    ),   
+        .set_val     (0              ),   
+        .set_val_vld (0              ),       
+        .clear       (i_vote_slot_rst),   
+        .dout        (vote_slot      )   
+    );
+    pipeline #(.STAGES(1), .DWIDTH(1), .RST_VAL(1'('d0))) 
+        accum_vld_pipe_inst
+        (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(i_accum_vld), 
+        .out_data(),
+        .out_data_lst(accum_vld)
+        );
+//-----------------------------------------------------------
+
+
+
     always_ff @( posedge clk ) begin
         if(!rst_n) begin
             vld <= 0;
         end
         else begin
-            if(i_is_clf & i_accum_vld)
+            if(i_is_clf & accum_vld)
                 vld <= 1;
             else if(reg_idx == i_n_labels-N_LABELS_WIDTH'('d1)) // vld will active for i_n_labels cycles
                 vld <= 0;
@@ -118,13 +148,32 @@ module vote_buffer #(
 
     always_ff @( posedge clk ) begin
         if(!rst_n) begin
+            vote_slot_reg <= BRAM_AWIDTH'(0);
+        end
+        else begin
+            if(i_is_clf & accum_vld)
+                vote_slot_reg <= vote_slot;
+            else
+                vote_slot_reg <= vote_slot_reg;
+        end
+    end
+
+    always_ff @( posedge clk ) begin
+        if(!rst_n) begin
             reg_idx <= N_LABELS_WIDTH'('d0);
         end
         else begin
-            if(vld)
-                reg_idx <= reg_idx + 1;
-            else
+//            if(vld)
+//                reg_idx <= reg_idx + 1;
+//            else
+//                reg_idx <= N_LABELS_WIDTH'('d0);
+
+            if(reg_idx == i_n_labels-N_LABELS_WIDTH'('d1))
                 reg_idx <= N_LABELS_WIDTH'('d0);
+            else if(vld)
+                reg_idx <= reg_idx + 1;
+            else 
+                reg_idx <= reg_idx;
         end
     end
     assign clf_label = reg_idx;
@@ -184,7 +233,7 @@ module vote_buffer #(
         .CE       (1'b1              ),  // input wire CE
         .SCLR     (1'b0              ),  // input wire SCLR
         .A        (5'(i_n_labels)    ),  // input wire [4 : 0] A
-        .B        (16'(i_vote_slot)  ),  // input wire [15 : 0] B
+        .B        (16'(vote_slot_reg)),  // input wire [15 : 0] B
         .C        (5'(clf_label_pipe)),  // input wire [4 : 0] C
         .SUBTRACT (1'b0              ),  // input wire SUBTRACT
         .P        (clf_addr          ),  // output wire [21 : 0] P
@@ -209,24 +258,25 @@ module vote_buffer #(
         .out_data_lst(clf_res)
         );
     
-    assign accum_res     = (i_is_clf)? clf_res : i_rgs_accum;
-    assign read_addr     = (i_is_clf)? BRAM_AWIDTH'(clf_addr) : BRAM_AWIDTH'(i_vote_slot);
-    assign read_addr_vld = (i_is_clf)? vld_mul_add : i_accum_vld;
+    assign accum_res     = (i_is_clf)? clf_res                  : i_rgs_accum;
+    assign read_addr     = (i_is_clf)? BRAM_AWIDTH'(clf_addr)   : BRAM_AWIDTH'(vote_slot);
+    assign read_addr_vld = (i_is_clf)? vld_mul_add              : accum_vld;
 
 //----------------------------------------------------------------------------------------
 // BRAM 
 //----------------------------------------------------------------------------------------
-    assign read_bram_rst  = (i_is_ps_read)? bram_rst_ps : 1'b0;
-    assign read_bram_en   = (i_is_ps_read)? bram_en_ps : 1'b1;
+    assign read_bram_rst  = (i_is_ps_read)? bram_rst_ps                        : 1'b0;
+    assign read_bram_en   = (i_is_ps_read)? bram_en_ps                         : 1'b1;
     assign read_bram_addr = (i_is_ps_read)? bram_addr_ps[BRAM_AWIDTH_32-1 : 2] : read_addr;
+
     assign bram_dout_ps   = 32'(read_bram_dout);
 
-    assign write_bram_we   = (i_is_ps_read)? clear_bram_we     : write_addr_vld;
-    assign write_bram_addr = (i_is_ps_read)? clear_bram_addr   : write_addr;
-    assign write_bram_din  = (i_is_ps_read)? BRAM_DWIDTH'('d0) : write_res;
+    assign write_bram_we   = (is_ps_read_pipe)? clear_bram_we                  : write_addr_vld;
+    assign write_bram_addr = (is_ps_read_pipe)? clear_bram_addr                : write_addr;
+    assign write_bram_din  = (is_ps_read_pipe)? BRAM_DWIDTH'('d0)              : write_res;
 
     vote_bram vote_bram_inst (
-        // READ
+        // VOTE BUFFER READ, PS READ
         .clka (clk           ),  // input wire clka
         .rsta (read_bram_rst ),  // input wire rsta
         .ena  (read_bram_en  ),  // input wire ena
@@ -235,7 +285,7 @@ module vote_buffer #(
         .dina (),                // input wire [15 : 0] dina
         .douta(read_bram_dout),  // output wire [15 : 0] douta
         
-        // WRITE
+        // VOTE BUFFER WRITE, PS WRITE
         .clkb (clk            ),    // input wire clkb
         .rstb (1'b0           ),    // input wire rstb
         .enb  (1'b1           ),      // input wire enb
@@ -303,6 +353,15 @@ module vote_buffer #(
         .in_data(bram_en_ps & !(|bram_we_ps)), 
         .out_data(),
         .out_data_lst(clear_bram_we)
+        );
+
+    pipeline #(.STAGES(2), .DWIDTH(1), .RST_VAL(1'('d0))) 
+        i_is_ps_read_pipe_stage
+        (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(i_is_ps_read), 
+        .out_data(),
+        .out_data_lst(is_ps_read_pipe)
         );
 
 endmodule
