@@ -2,113 +2,111 @@
 
 module sample_fifo #(
      parameter FIFO_WIDTH = 16
-    ,parameter FIFO_DEPTH = 1000 // number of label for classification problem
+    ,parameter FIFO_DEPTH_BIT = 4 // DEPTH_BIT**2 labels
 ) (
-     input                            clk
-    ,input                            rst_n
+     input                              clk
+    ,input                              rst_n
 
-    ,input                            i_flush // empty the FIFO
-    ,input                            i_read_rst // reset read pointer
-    ,input                            i_mark_read_rst // mark the reset point of read pointer
-    
-    ,input                            i_push
-    ,input [FIFO_WIDTH-1:0]           i_rear
-    ,output reg                       o_is_full
-
-    ,input                            i_pop
-    ,output [FIFO_WIDTH-1:0]          o_front
-    ,output reg                       o_vld 
-    ,output reg                       o_empty
-    ,output reg [FIFO_WIDTH-1:0]          rptr
-    ,output reg [FIFO_WIDTH-1:0]          wptr
+    ,input                              i_flush // empty the FIFO
+    ,input                              i_read_rst // reset read pointer
+    ,input                              i_mark_read_rst // mark the reset point of read pointer
+    ,input                              i_pop
+    ,input                              i_push
+    ,input [FIFO_WIDTH-1:0]             i_rear
+    ,output reg                         o_is_full
+    ,output [FIFO_WIDTH-1:0]            o_front
+    ,output reg                         o_vld 
+    ,output reg                         o_empty
 );
 
-//    logic   [FIFO_WIDTH-1:0]            rptr;
-//    logic   [FIFO_WIDTH-1:0]            wptr;
+    logic   [FIFO_DEPTH_BIT:0]          rptr, wptr, mark_ptr;
     logic   [FIFO_WIDTH-1:0]            data_in_bram;
-    logic   [FIFO_WIDTH-1:0]            rptr_in_accum;
-    logic   [FIFO_WIDTH-1:0]            wptr_in_accum;
-    logic   [FIFO_WIDTH-1:0]            mark_ptr;
-    logic   [FIFO_WIDTH-1:0]            pointer_result;
     
-    logic   [FIFO_WIDTH-1:0]            Q_rear;
+    logic                               fbit_comp, pointer_equal;    
+    logic                               push;
+                        
+    logic                               we_counter, re, we_bram;
+    logic                               almost_full, almost_empty;
+    logic   [FIFO_DEPTH_BIT:0]          pointer_sub;                        
     
-    logic                               push, count_push;
+    localparam FIFO_DEPTH = 2**FIFO_DEPTH_BIT;
+    localparam FIFO_DEPTH_SUB_1 = FIFO_DEPTH - 1;
     
-    logic                               Q_valid, Q1_valid, Q2_valid;
-
-    logic                               we, re, bypass_rptr, bypass_wptr;
+    assign fbit_comp = wptr[FIFO_DEPTH_BIT] ^ rptr[FIFO_DEPTH_BIT];
+    assign pointer_sub = wptr - rptr;
+    assign pointer_equal = wptr[FIFO_DEPTH_BIT - 1:0] == rptr[FIFO_DEPTH_BIT - 1:0];
     
-    assign pointer_result = wptr - rptr;
-    assign re = (~o_empty) & i_pop;
-    assign we = (~o_is_full) & push;
+        
+    always @(*)
+    begin
+        almost_full = pointer_sub == FIFO_DEPTH_SUB_1 | pointer_sub == FIFO_DEPTH;
+        almost_empty = pointer_sub == 1 | pointer_sub == 0;
+        o_is_full = fbit_comp & pointer_equal;
+        o_empty = (~fbit_comp) & pointer_equal;
+    end
+    
+    assign re = (~almost_empty) & i_pop;
+    assign we_counter = (~almost_full) & i_push;
+    assign we_bram = (~o_is_full) & i_push;
     
     blk_mem_gen_0 b(
         .clka       (clk),
         .clkb       (clk),
-        .addra      (wptr),
-        .addrb      (rptr),
+        .addra      (14'(wptr)),
+        .addrb      (14'(rptr)),
         .dina       (data_in_bram),
         .doutb      (o_front),
-        .wea        (we)
+        .wea        (we_bram)
     );
     
-    c_accum_0 count_rptr (
-        .B          (rptr_in_accum),            // input wire [15 : 0] B
-        .CLK        (clk),        // input wire CLK
-        .BYPASS     (bypass_rptr),  // input wire BYPASS
-        .Q          (rptr)            // output wire [15 : 0] Q
+
+    
+    // READ_COUNTER
+    counter_with_lat #(.WIDTH(FIFO_DEPTH_BIT+1)) count_rptr (
+        .clk                (clk),      
+        .rst_n              (rst_n),
+        .inc                (re), 
+        .set_val            ((FIFO_DEPTH_BIT+1)'(mark_ptr)), 
+        .set_val_vld        (i_read_rst),
+        .clear              (i_flush),
+        .dout               (rptr)           
     );
     
-    c_accum_0 count_wptr (
-        .B          (wptr_in_accum),            // input wire [15 : 0] B
-        .CLK        (clk),        // input wire CLK
-        .BYPASS     (bypass_wptr),  // input wire BYPASS
-        .Q          (wptr)            // output wire [15 : 0] Q
+    // WRITE COUNTER
+    counter_with_lat #(.WIDTH(FIFO_DEPTH_BIT+1)) count_wptr (
+        .clk                (clk),       
+        .rst_n              (rst_n),
+        .inc                (we_counter), 
+        .set_val            ((FIFO_DEPTH_BIT+1)'(0)), 
+        .set_val_vld        (1'b0),
+        .clear              (i_flush),
+        .dout               (wptr)    
     );
     
-    always @(*)
-    begin
-        o_is_full = pointer_result >= FIFO_DEPTH;
-        o_empty = pointer_result <= 2;
-    end
+    pipeline #(.STAGES(3), .DWIDTH(1), .RST_VAL(1'('d0)))
+    vld_pipe_inst0
+    (
+        .clk(clk), 
+        .rst_n(rst_n), 
+        .in_data(re), 
+        .out_data_lst(o_vld)
+    );
     
-    //align data
-    always @(posedge clk)
-    begin
-        if (!rst_n)
-        begin
-            count_push <= 0;
-        end
-        else
-        begin
-            if (i_push == 1)
-            begin
-                push <= 1;
-                count_push <= 1;
-            end
-            else
-            begin
-                count_push <= count_push - 1;
-                if (count_push == 0)
-                begin
-                    push <= i_push;
-                end
-                else
-                begin
-                    push <= push;
-                end
-            end
-               
-            Q_rear <= i_rear;
-            data_in_bram <= Q_rear;
-            
-            Q1_valid <= re;
-            Q2_valid <= Q1_valid;
-            Q_valid <= Q2_valid;
-            o_vld <= Q_valid;
-        end
-    end
+    pipeline #(.STAGES(1), .DWIDTH(FIFO_WIDTH), .RST_VAL(1'('d0)))
+    data_pipe_inst0
+    (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(i_rear), 
+        .out_data_lst(data_in_bram)
+    );
+    
+    pipeline #(.STAGES(1), .DWIDTH(1), .RST_VAL(1'('d0)))
+    push_pipe_inst0
+    (
+        .clk(clk), .rst_n(rst_n), 
+        .in_data(i_push),
+        .out_data_lst(push)
+    );
     
     //mark
     always_ff @(posedge clk) begin
@@ -119,45 +117,4 @@ module sample_fifo #(
         else
             mark_ptr <= mark_ptr;
     end
-    
-    // read
-    always_ff @(posedge clk) begin
-        if(!rst_n || i_flush)
-        begin
-            rptr_in_accum <= 0;
-            bypass_rptr <= 1;
-        end
-        else if (i_read_rst)
-        begin
-            rptr_in_accum <= mark_ptr;
-            bypass_rptr <= 1;
-        end
-        else if (re & pointer_result > 2)
-        begin
-            rptr_in_accum <= 1;
-            bypass_rptr <= 0;
-        end
-        else
-        begin
-            rptr_in_accum <= 0;
-            bypass_rptr <= 0;
-        end
-    end
-    
-    // WRITE
-    always_ff @(posedge clk) begin
-        if(!rst_n || i_flush) begin
-            wptr_in_accum <= 0;
-            bypass_wptr <= 1;
-        end
-        else if (i_push) begin
-            wptr_in_accum <= 1;
-            bypass_wptr <= 0;
-        end
-        else begin
-            wptr_in_accum <= 0;
-            bypass_wptr <= 0;
-        end
-    end
-    
 endmodule
