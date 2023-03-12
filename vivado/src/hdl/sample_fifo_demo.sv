@@ -62,10 +62,10 @@ module sample_fifo #(
     
     always @(*)
     begin
-        almost_full = (full_fbit_comp & full_pointer_equal & we_counter_pipe) || (fbit_comp & pointer_equal);
-        almost_empty = ((~empty_fbit_comp) & empty_pointer_equal & re_pipe) || ((~fbit_comp) & pointer_equal);
         o_is_full = (fbit_comp & pointer_equal);
         o_empty = ((~fbit_comp) & pointer_equal);
+        almost_full = (full_fbit_comp & full_pointer_equal & we_counter_pipe) || o_is_full;
+        almost_empty = ((~empty_fbit_comp) & empty_pointer_equal & re_pipe) || o_empty;
     end
     
     assign re = (~almost_empty) & i_pop;
