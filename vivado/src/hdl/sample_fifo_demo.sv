@@ -25,7 +25,7 @@ module sample_fifo #(
 );
 
     logic   [FIFO_WIDTH-1:0]            data_in_bram;
-    logic   [FIFO_DEPTH_BIT-1:0]        mark_ptr;
+    logic   [FIFO_DEPTH_BIT:0]          mark_ptr;
     
     logic   [FIFO_DEPTH_BIT:0]          sub_wptr;
     logic   [FIFO_DEPTH_BIT:0]          sub_rptr;
