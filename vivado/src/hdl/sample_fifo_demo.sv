@@ -2,7 +2,7 @@
 
 module sample_fifo #(
      parameter FIFO_WIDTH = 16
-    ,parameter FIFO_DEPTH_BIT = 4 // number of label for classification problem
+    ,parameter FIFO_DEPTH_BIT = 5 // number of label for classification problem
 ) (
      input                              clk
     ,input                              rst_n
@@ -20,23 +20,23 @@ module sample_fifo #(
     ,output [FIFO_WIDTH-1:0]            o_front
     ,output reg                         o_vld 
     ,output reg                         o_empty
-    ,output reg [FIFO_DEPTH_BIT:0]      rptr
-    ,output reg [FIFO_DEPTH_BIT:0]      wptr
 );
 
     logic   [FIFO_WIDTH-1:0]            data_in_bram;
-    logic   [FIFO_DEPTH_BIT:0]          mark_ptr;
+    logic   [FIFO_DEPTH_BIT-1:0]        mark_ptr;
     
-    logic   [FIFO_DEPTH_BIT:0]          sub_wptr;
-    logic   [FIFO_DEPTH_BIT:0]          sub_rptr;
+    logic   [FIFO_DEPTH_BIT:0]          sub_wptr, wptr;
+    logic   [FIFO_DEPTH_BIT:0]          sub_rptr, rptr;
     
     logic                               fbit_comp, pointer_equal;    
     logic                               push, count_push;
     
-    logic                               data_vld, almost_full, almost_empty;                      
+    logic                               almost_full, almost_empty;                      
     logic                               we_counter, we_counter_pipe, re, re_pipe, we_bram;
     logic                               empty_fbit_comp, full_fbit_comp;
     logic                               empty_pointer_equal, full_pointer_equal;
+    
+    logic   [FIFO_DEPTH_BIT-1:0]        mark_pipe;
     
     c_addsub_0 sub_wpointer (
       .A(wptr),      // input wire [11 : 0] A
@@ -62,10 +62,10 @@ module sample_fifo #(
     
     always @(*)
     begin
+        almost_full = (full_fbit_comp & full_pointer_equal & we_counter_pipe) || (fbit_comp & pointer_equal);
+        almost_empty = ((~empty_fbit_comp) & empty_pointer_equal & re_pipe) || ((~fbit_comp) & pointer_equal);
         o_is_full = (fbit_comp & pointer_equal);
         o_empty = ((~fbit_comp) & pointer_equal);
-        almost_full = (full_fbit_comp & full_pointer_equal & we_counter_pipe) || o_is_full;
-        almost_empty = ((~empty_fbit_comp) & empty_pointer_equal & re_pipe) || o_empty;
     end
     
     assign re = (~almost_empty) & i_pop;
@@ -155,11 +155,17 @@ module sample_fifo #(
     
     //mark
     always_ff @(posedge clk) begin
-        if(!rst_n)
+        if(!rst_n) begin
+            mark_pipe <= 0;
             mark_ptr <= 0;
-        else if (i_mark_read_rst)
-            mark_ptr <= rptr - 1;
+        end
         else
-            mark_ptr <= mark_ptr;
+        begin 
+            mark_pipe <= rptr;
+            if (i_mark_read_rst)
+                mark_ptr <= mark_pipe;
+            else
+                mark_ptr <= mark_ptr;
+        end
     end
 endmodule
