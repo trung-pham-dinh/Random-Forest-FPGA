@@ -45,18 +45,19 @@ module vote_buffer #(
     input bram_rst_ps // Reset Signal (required)
 
     // simulation
-    ,output                      vld_sim           
-    ,output [N_LABELS_WIDTH-1:0] reg_idx_sim       
-    ,output [RES_WIDTH-1:0]      clf_rgs_res_sim   
-    ,output [21 : 0]             clf_addr_sim      
+    // ,output                      vld_sim           
+    // ,output [N_LABELS_WIDTH-1:0] reg_idx_sim       
+    // ,output [RES_WIDTH-1:0]      clf_res_sim   
+    // ,output [21 : 0]             clf_addr_sim      
     ,output [RES_WIDTH-1:0]      accum_res_sim     
-    ,output [BRAM_AWIDTH-1:0]    read_addr_sim     
-    ,output                      read_addr_vld_sim 
+    // ,output [BRAM_AWIDTH-1:0]    read_addr_sim     
+    // ,output                      read_addr_vld_sim 
     ,output [RES_WIDTH-1:0]      accum_res_pipe_sim
     ,output [BRAM_DWIDTH-1:0]    write_bram_din_sim     
     ,output [BRAM_AWIDTH-1:0]    write_bram_addr_sim    
     ,output                      write_bram_we_sim
-    ,output [BRAM_AWIDTH-1:0]    read_bram_addr_sim
+    // ,output [BRAM_AWIDTH-1:0]    read_bram_addr_sim
+    // ,output [BRAM_DWIDTH-1:0]    write_res_sim
 );
     localparam MUL_ADD_N_STAGES      = 3;
     localparam READ_BRAM_STAGES      = 1;
@@ -65,7 +66,7 @@ module vote_buffer #(
     logic                            accum_vld;
     logic [BRAM_AWIDTH-1:0]          vote_slot_reg,vote_slot;
     logic [N_LABELS_WIDTH-1:0]       clf_label,clf_label_pipe;
-    logic [RES_WIDTH-1:0]            clf_rgs_res,clf_res,accum_res,accum_res_pipe;
+    logic [RES_WIDTH-1:0]            clf_res,clf_res_pipe,accum_res,accum_res_pipe;
 
     logic [21 : 0]                   clf_addr;
     logic                            vld, vld_mul_add, write_addr_vld;
@@ -92,24 +93,25 @@ module vote_buffer #(
 // Simulation logic
 //----------------------------------------------------------------------------------------
 
-    assign vld_sim            = vld;
-    assign reg_idx_sim        = reg_idx;
-    assign clf_rgs_res_sim    = clf_rgs_res;
-    assign clf_addr_sim       = clf_addr;
+    // assign vld_sim            = vld;
+    // assign reg_idx_sim        = reg_idx;
+    // assign clf_res_sim        = clf_res;
+    // assign clf_addr_sim       = clf_addr;
     assign accum_res_sim      = accum_res;
-    assign read_addr_sim      = read_addr;
-    assign read_addr_vld_sim  = read_addr_vld;
+    // assign read_addr_sim      = read_addr;
+    // assign read_addr_vld_sim  = read_addr_vld;
     assign accum_res_pipe_sim = accum_res_pipe;
     assign write_bram_din_sim = write_bram_din;
     assign write_bram_addr_sim= write_bram_addr;
     assign write_bram_we_sim  = write_bram_we;
-    assign read_bram_addr_sim = read_bram_addr;
+    // assign read_bram_addr_sim = read_bram_addr;
+    // assign write_res_sim      = write_res;
 
 //----------------------------------------------------------------------------------------
 // Scan result registers
 //----------------------------------------------------------------------------------------
 
-    counter_with_lat #(
+    counter_with_lat #( // 2 cycles delay counter
         .WIDTH(BRAM_AWIDTH)
     ) counter_inst(
         .clk         (clk            ),   
@@ -120,7 +122,7 @@ module vote_buffer #(
         .clear       (i_vote_slot_rst),   
         .dout        (vote_slot      )   
     );
-    pipeline #(.STAGES(1), .DWIDTH(1), .RST_VAL(1'('d0))) 
+    pipeline #(.STAGES(1), .DWIDTH(1), .RST_VAL(1'('d0))) // delay vld to compensate with the latency of counter
         accum_vld_pipe_inst
         (
         .clk(clk), .rst_n(rst_n), 
@@ -178,43 +180,52 @@ module vote_buffer #(
     end
     assign clf_label = reg_idx;
 
-    always_comb begin
-        case (reg_idx)
-            N_LABELS_WIDTH'('d0): begin
-                clf_rgs_res = i_clf_accum[0*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d1): begin
-                clf_rgs_res = i_clf_accum[1*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d2): begin
-                clf_rgs_res = i_clf_accum[2*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d3): begin
-                clf_rgs_res = i_clf_accum[3*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d4): begin
-                clf_rgs_res = i_clf_accum[4*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d5): begin
-                clf_rgs_res = i_clf_accum[5*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d6): begin
-                clf_rgs_res = i_clf_accum[6*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d7): begin
-                clf_rgs_res = i_clf_accum[7*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d8): begin
-                clf_rgs_res = i_clf_accum[8*RES_WIDTH +: RES_WIDTH];
-            end
-            N_LABELS_WIDTH'('d9): begin
-                clf_rgs_res = i_clf_accum[9*RES_WIDTH +: RES_WIDTH];
-            end
-            default: begin
-                clf_rgs_res = i_clf_accum[0*RES_WIDTH +: RES_WIDTH];
-            end
-        endcase
-    end
+    // always_comb begin
+    //     case (reg_idx)
+    //         N_LABELS_WIDTH'('d0): begin
+    //             clf_res = i_clf_accum[0*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d1): begin
+    //             clf_res = i_clf_accum[1*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d2): begin
+    //             clf_res = i_clf_accum[2*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d3): begin
+    //             clf_res = i_clf_accum[3*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d4): begin
+    //             clf_res = i_clf_accum[4*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d5): begin
+    //             clf_res = i_clf_accum[5*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d6): begin
+    //             clf_res = i_clf_accum[6*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d7): begin
+    //             clf_res = i_clf_accum[7*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d8): begin
+    //             clf_res = i_clf_accum[8*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         N_LABELS_WIDTH'('d9): begin
+    //             clf_res = i_clf_accum[9*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //         default: begin
+    //             clf_res = i_clf_accum[0*RES_WIDTH +: RES_WIDTH];
+    //         end
+    //     endcase
+    // end
+
+    logic [RES_WIDTH-1:0] clf_accum [0:N_LABELS-1];
+    generate
+        for (genvar l = 0; l<N_LABELS; l=l+1) begin
+            assign clf_accum[l] = i_clf_accum[l*RES_WIDTH +: RES_WIDTH];
+        end
+    endgenerate
+
+    assign clf_res = clf_accum[reg_idx];
 
 //----------------------------------------------------------------------------------------
 // MULTIPLICATION & ADDITION stage
@@ -253,12 +264,12 @@ module vote_buffer #(
         res_pipe_mul_add_stage
         (
         .clk(clk), .rst_n(rst_n), 
-        .in_data(clf_rgs_res), 
+        .in_data(clf_res), 
         .out_data(),
-        .out_data_lst(clf_res)
+        .out_data_lst(clf_res_pipe)
         );
     
-    assign accum_res     = (i_is_clf)? clf_res                  : i_rgs_accum;
+    assign accum_res     = (i_is_clf)? clf_res_pipe             : i_rgs_accum;
     assign read_addr     = (i_is_clf)? BRAM_AWIDTH'(clf_addr)   : BRAM_AWIDTH'(vote_slot);
     assign read_addr_vld = (i_is_clf)? vld_mul_add              : accum_vld;
 

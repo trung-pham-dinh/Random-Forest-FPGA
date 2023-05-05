@@ -4,6 +4,7 @@ module attribute_ram #(
      parameter ATTR_WIDTH        = 16
     ,parameter ATTR_ABIT         = 5
     ,parameter N_DTPS            = 4
+    // ,parameter VOTE_ABIT         = 10
     ,localparam RAM_DEPTH        = 2**ATTR_ABIT
     ,localparam STATE_FIFO_WIDTH = 2
 ) (
@@ -24,17 +25,20 @@ module attribute_ram #(
     ,input  [N_DTPS-1:0]                i_attr_ram_switch
     ,output                             o_is_attr_ram_avai
     ,output                             o_is_sample_done // active when both FIFO and 2 RAMs are empty
+
+    ,output                             o_is_all_dtp_switch
+    // ,output [VOTE_ABIT-1:0]             o_vote_slot
     // simulation
-    // ,output [RAM_DEPTH*ATTR_WIDTH-1:0]  attr_ram_0_sim
-    // ,output [RAM_DEPTH*ATTR_WIDTH-1:0]  attr_ram_1_sim
-    // ,output                             cur_attr_ram_write_sim
-    // ,output [STATE_FIFO_WIDTH-1:0]      state_fifo_sim
-    // ,output                             use_done_sim
-    // ,output                             fill_done_sim
-    // ,output [ATTR_ABIT-1:0]             pop_amount_sim
-    // ,output [ATTR_ABIT-1:0]             recv_amount_sim
-    // ,output                             cur_attr_ram_read_combine_sim
-    // ,output [1:0]                       is_attr_ram_avai_read_sim
+//     ,output [RAM_DEPTH*ATTR_WIDTH-1:0]  attr_ram_0_sim
+//     ,output [RAM_DEPTH*ATTR_WIDTH-1:0]  attr_ram_1_sim
+//     ,output                             cur_attr_ram_write_sim
+//     ,output [STATE_FIFO_WIDTH-1:0]      state_fifo_sim
+//     ,output                             use_done_sim
+//     ,output                             fill_done_sim
+//     ,output [ATTR_ABIT-1:0]             pop_amount_sim
+//     ,output [ATTR_ABIT-1:0]             recv_amount_sim
+//     ,output                             cur_attr_ram_read_combine_sim
+//     ,output [1:0]                       is_attr_ram_avai_read_sim
 );
     enum logic [STATE_FIFO_WIDTH-1:0] {STATE_FIFO_IDLE   = STATE_FIFO_WIDTH'('d0),
                                        STATE_FIFO_RST    = STATE_FIFO_WIDTH'('d1),
@@ -62,21 +66,21 @@ module attribute_ram #(
 // Simulation logic
 //----------------------------------------------------------------------------------------
 
-    // generate
-    //     for(genvar i=0; i<RAM_DEPTH; i=i+1) begin
-    //         assign attr_ram_0_sim[i*ATTR_WIDTH +: ATTR_WIDTH] = attr_ram_0[i];
-    //         assign attr_ram_1_sim[i*ATTR_WIDTH +: ATTR_WIDTH] = attr_ram_1[i];
-    //     end
-    // endgenerate
+//     generate
+//         for(genvar i=0; i<RAM_DEPTH; i=i+1) begin
+//             assign attr_ram_0_sim[i*ATTR_WIDTH +: ATTR_WIDTH] = attr_ram_0[i];
+//             assign attr_ram_1_sim[i*ATTR_WIDTH +: ATTR_WIDTH] = attr_ram_1[i];
+//         end
+//     endgenerate
     
-    // assign cur_attr_ram_write_sim = cur_attr_ram_write;
-    // assign state_fifo_sim = state_fifo;
-    // assign fill_done_sim = fill_done;
-    // assign use_done_sim = use_done;
-    // assign recv_amount_sim = recv_amount;
-    // assign pop_amount_sim = pop_amount;
-    // assign cur_attr_ram_read_combine_sim = cur_attr_ram_read_combine;
-    // assign is_attr_ram_avai_read_sim = is_attr_ram_avai_read;
+//     assign cur_attr_ram_write_sim = cur_attr_ram_write;
+//     assign state_fifo_sim = state_fifo;
+//     assign fill_done_sim = fill_done;
+//     assign use_done_sim = use_done;
+//     assign recv_amount_sim = recv_amount;
+//     assign pop_amount_sim = pop_amount;
+//     assign cur_attr_ram_read_combine_sim = cur_attr_ram_read_combine;
+//     assign is_attr_ram_avai_read_sim = is_attr_ram_avai_read;
 //----------------------------------------------------------------------------------------
 // RAM
 //---------------------------------------------------------------------------------------
@@ -127,10 +131,13 @@ module attribute_ram #(
         end
     end
 
+    logic start_attr_ram;
+    assign start_attr_ram = i_attr_ram_start & ~i_fifo_is_empty;
+
     always_comb begin
         case (state_fifo)
             STATE_FIFO_IDLE: begin
-                if(i_attr_ram_start & ~i_fifo_is_empty)
+                if(start_attr_ram)
                     state_fifo_next = STATE_FIFO_RST;
                 else
                     state_fifo_next = state_fifo;
@@ -210,6 +217,8 @@ module attribute_ram #(
     assign fill_done = (state_fifo==STATE_FIFO_FILL) && (recv_amount==i_pop_amount);
     assign use_done = (cur_attr_ram_read_combine ^ cur_attr_ram_read[0]) & is_all_switch;
 
+    assign o_is_all_dtp_switch = use_done;
+
 //                             ___     ___     ___     ___     ___     ___  
 //clk                      ___|   |___|   |___|   |___|   |___|   |___|   |
 //                                     ___________________________________
@@ -260,8 +269,62 @@ module attribute_ram #(
             else begin
                 pop_amount <= ATTR_ABIT'('d0);
             end
+
+            // CONSIDER TO TEST THIS NEW COUNTER
+            
+            // if(pop_amount == i_pop_amount) begin
+            //     pop_amount <= ATTR_ABIT'('d0);
+            // end
+            // else if(o_fifo_pop)begin
+            //     pop_amount <= pop_amount + ATTR_ABIT'('d1);
+            // end
+            // else begin
+            //     pop_amount <= pop_amount;
+            // end
         end
     end
+
+//----------------------------------------------------------------------------------------
+// VOTE SLOT
+//----------------------------------------------------------------------------------------
+
+    // logic [VOTE_ABIT-1:0] vote_slot [0:1];
+    // logic [VOTE_ABIT-1:0] counter_out;
+
+    // counter_with_lat #(
+    //     .WIDTH(VOTE_ABIT)
+    // ) vote_slot_counter_inst(
+    //     .clk         (clk           ),   
+    //     .rst_n       (rst_n         ),   
+    //     .inc         (fill_done     ),   
+    //     .set_val     (0             ),       
+    //     .set_val_vld (0             ),     
+    //     .clear       (start_attr_ram),   
+    //     .dout        (counter_out   )   
+    // );
+
+    // assign o_vote_slot = vote_slot[cur_attr_ram_read[0]];
+
+    // always_ff @( posedge clk ) begin
+    //     if (!rst_n) begin
+    //         vote_slot[0] <= VOTE_ABIT'(0);
+    //         vote_slot[1] <= VOTE_ABIT'(0);
+    //     end
+    //     else begin
+    //         if(start_attr_ram) begin
+    //             vote_slot[0] <= VOTE_ABIT'(0);
+    //             vote_slot[1] <= VOTE_ABIT'(0);  
+    //         end
+    //         else if(fill_done) begin
+    //             vote_slot[cur_attr_ram_write] <= counter_out;
+    //         end
+    //         else begin
+    //             vote_slot[0] <= vote_slot[0];
+    //             vote_slot[1] <= vote_slot[1];
+    //         end
+    //     end
+    // end
+
 
 //----------------------------------------------------------------------------------------
 // READ SIDE

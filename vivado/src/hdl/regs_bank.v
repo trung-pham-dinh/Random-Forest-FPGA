@@ -19,7 +19,6 @@
 		input  [C_S_AXI_DATA_WIDTH-1:0] stt_reg,       // reg1
         output [C_S_AXI_DATA_WIDTH-1:0] samp_thsh_reg, // reg2
 		output [C_S_AXI_DATA_WIDTH-1:0] n_attrs_reg,   // reg3
-		output [C_S_AXI_DATA_WIDTH-1:0] vote_reg,   // reg4
 
 		// User ports ends
 		// Do not modify the ports beyond this line
@@ -714,7 +713,6 @@
     assign ctrl_reg 		= slv_reg0;
 	assign samp_thsh_reg 	= slv_reg2;
 	assign n_attrs_reg		= slv_reg3;
-	assign vote_reg			= slv_reg4;
 	// User logic ends
 
 	endmodule

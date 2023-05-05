@@ -3,8 +3,10 @@
 module dtp_paper #(
      parameter DTP_IDX = 0
     ,localparam PIPE_STAGES      = 5
-    ,localparam BRAM_AWIDTH      = 14
+    ,parameter BRAM_AWIDTH       = 15 // edit when changing N_DTPs
+    ,parameter IS_INT            = 1
     ,localparam BRAM_DWIDTH      = 32
+    ,localparam ADDER_WIDTH      = 20
     ,localparam TREE_RAM_STAGES  = 2
     ,localparam COMPARE_STAGES   = 2
     
@@ -69,9 +71,8 @@ module dtp_paper #(
     input                                      bram_rst_ps // Reset Signal (required)
 
     // simulation output
-    
-    //  ,output [BRAM_AWIDTH*PIPE_STAGES-1:0]      bram_addr_pipe_sim  
-    //  ,output [STATE_CTRL_WIDTH*PIPE_STAGES-1:0] state_ctrl_pipe_sim 
+     ,output [BRAM_AWIDTH*PIPE_STAGES-1:0]      bram_addr_pipe_sim  
+     ,output [STATE_CTRL_WIDTH*PIPE_STAGES-1:0] state_ctrl_pipe_sim 
     //  ,output [BRAM_DWIDTH-1:0]                  tree_ram_dout_sim
     // ,output [THSH_WIDTH-1:0]                   attr_ram_dout_sim   
 
@@ -86,9 +87,10 @@ module dtp_paper #(
     //  ,output [BRAM_AWIDTH-1:0]                  next_tree_addr_sim
     //  ,output [BRAM_AWIDTH-1:0]                  tree_addr_mux_a_sim
     //  ,output [UPD_WIDTH-1:0]                    upd_pipe_lst_sim
-    //  ,output                                    compare_out_sim
+     ,output                                    compare_out_sim
     //  ,output [STATE_DTP_WIDTH-1:0]              state_dtp_sim
     // ,output                                    pipeline_start_sim
+    ,output [THSH_WIDTH-1:0]                        thsh_sim
 );
     localparam STATE_DTP_IDLE       = STATE_DTP_WIDTH'('d0);
     localparam STATE_DTP_RST        = STATE_DTP_WIDTH'('d1);
@@ -135,7 +137,7 @@ module dtp_paper #(
 // Simulation logic
 //----------------------------------------------------------------------------------------
 
-    //  assign bram_addr_pipe_sim   = bram_addr_pipe;
+     assign bram_addr_pipe_sim   = bram_addr_pipe;
     //  assign tree_ram_dout_sim    = tree_ram_dout;
     // assign attr_ram_dout_sim    = attr_ram_dout;
     //  assign init_node_sim        = init_node;
@@ -148,16 +150,17 @@ module dtp_paper #(
     //  assign tree_addr_mux_a_sim  = tree_addr_mux_a;
     //  assign state_ctrl_pre_sim   = state_ctrl_pre;
     //  assign upd_pipe_lst_sim     = upd_pipe_lst;
-    //  assign compare_out_sim      =compare_out[0];
+     assign compare_out_sim      =compare_out[0];
+     assign thsh_sim                = tree_ram_dout[THSH_IDX +: THSH_WIDTH];
     // assign state_dtp_sim        = state_dtp;
     // assign pipeline_start_sim   = pipeline_start;
 
+    generate
+        for(genvar i=0; i<PIPE_STAGES; i=i+1) begin
+            assign state_ctrl_pipe_sim[i*STATE_CTRL_WIDTH +: STATE_CTRL_WIDTH] = state_ctrl_pipe[i];
+        end
+    endgenerate
 
-    // generate
-    //     for(genvar i=0; i<PIPE_STAGES; i=i+1) begin
-    //         assign state_ctrl_pipe_sim[i*STATE_CTRL_WIDTH +: STATE_CTRL_WIDTH] = state_ctrl_pipe[i];
-    //     end
-    // endgenerate
     
 //----------------------------------------------------------------------------------------
 // PIPELINE PATH
@@ -202,124 +205,249 @@ module dtp_paper #(
 //----------------------------------------------------------------------------------------
 // TREE ACCESS
 //---------------------------------------------------------------------------------------- 
-    logic [15:0] bram_addr_add_1_temp;
+    logic [ADDER_WIDTH-1:0] bram_addr_add_1_temp;
 
     dtp_int_add_paper add_1_inst_0 (
-    .A(16'(bram_addr)),      // input wire [15 : 0] A
-    .B(16'd1),      // input wire [15 : 0] B
+    .A(ADDER_WIDTH'(bram_addr)),      // input wire [ADDER_WIDTH-1 : 0] A
+    .B(ADDER_WIDTH'('d1)),      // input wire [ADDER_WIDTH-1 : 0] B
     .CLK(clk),  // input wire CLK
-    .S(bram_addr_add_1_temp)      // output wire [15 : 0] S
+    .S(bram_addr_add_1_temp)      // output wire [ADDER_WIDTH-1 : 0] S
     );
 
     assign bram_addr_add_1 = BRAM_AWIDTH'(bram_addr_add_1_temp);
 //----------------------------------------------------------------------------------------
-    generate
-        if(DTP_IDX==0) begin
-            dtp_bram_paper tree_ram_inst_0 (
-                // DTP
-            .clka (clk),    // input wire clka
-            .rsta (1'b0),    // input wire rsta
-            .ena  (1'b1),      // input wire ena
-            .wea  (1'b0),      // input wire [0 : 0] wea
-            .addra(bram_addr),  // input wire [13 : 0] addra
-            .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
-            .douta(tree_ram_dout),  // output wire [31 : 0] douta
+    // generate
+    //     if(DTP_IDX==0) begin
+    //         dtp_bram_paper tree_ram_inst_0 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
 
-                // PS
-            .clkb (bram_clk_ps),    // input wire clkb
-            .rstb (bram_rst_ps),    // input wire rstb
-            .enb  (bram_en_ps),      // input wire enb
-            .web  (|bram_we_ps),      // input wire [0 : 0] web
-            .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
-            .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
-            );
-        end
-        else if(DTP_IDX==1) begin
-            dtp_bram_paper_1 tree_ram_inst_1 (
-                // DTP
-            .clka (clk),    // input wire clka
-            .rsta (1'b0),    // input wire rsta
-            .ena  (1'b1),      // input wire ena
-            .wea  (1'b0),      // input wire [0 : 0] wea
-            .addra(bram_addr),  // input wire [13 : 0] addra
-            .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
-            .douta(tree_ram_dout),  // output wire [31 : 0] douta
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==1) begin
+    //         dtp_bram_paper_1 tree_ram_inst_1 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
 
-                // PS
-            .clkb (bram_clk_ps),    // input wire clkb
-            .rstb (bram_rst_ps),    // input wire rstb
-            .enb  (bram_en_ps),      // input wire enb
-            .web  (|bram_we_ps),      // input wire [0 : 0] web
-            .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
-            .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
-            );
-        end
-        else if(DTP_IDX==2) begin
-            dtp_bram_paper_2 tree_ram_inst_2 (
-                // DTP
-            .clka (clk),    // input wire clka
-            .rsta (1'b0),    // input wire rsta
-            .ena  (1'b1),      // input wire ena
-            .wea  (1'b0),      // input wire [0 : 0] wea
-            .addra(bram_addr),  // input wire [13 : 0] addra
-            .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
-            .douta(tree_ram_dout),  // output wire [31 : 0] douta
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==2) begin
+    //         dtp_bram_paper_2 tree_ram_inst_2 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
 
-                // PS
-            .clkb (bram_clk_ps),    // input wire clkb
-            .rstb (bram_rst_ps),    // input wire rstb
-            .enb  (bram_en_ps),      // input wire enb
-            .web  (|bram_we_ps),      // input wire [0 : 0] web
-            .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
-            .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
-            );
-        end
-        else if(DTP_IDX==3) begin
-            dtp_bram_paper_3 tree_ram_inst_3 (
-                // DTP
-            .clka (clk),    // input wire clka
-            .rsta (1'b0),    // input wire rsta
-            .ena  (1'b1),      // input wire ena
-            .wea  (1'b0),      // input wire [0 : 0] wea
-            .addra(bram_addr),  // input wire [13 : 0] addra
-            .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
-            .douta(tree_ram_dout),  // output wire [31 : 0] douta
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==3) begin
+    //         dtp_bram_paper_3 tree_ram_inst_3 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
 
-                // PS
-            .clkb (bram_clk_ps),    // input wire clkb
-            .rstb (bram_rst_ps),    // input wire rstb
-            .enb  (bram_en_ps),      // input wire enb
-            .web  (|bram_we_ps),      // input wire [0 : 0] web
-            .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
-            .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
-            );
-        end
-        else if(DTP_IDX==4) begin
-            dtp_bram_paper_4 tree_ram_inst_4 (
-                // DTP
-            .clka (clk),    // input wire clka
-            .rsta (1'b0),    // input wire rsta
-            .ena  (1'b1),      // input wire ena
-            .wea  (1'b0),      // input wire [0 : 0] wea
-            .addra(bram_addr),  // input wire [13 : 0] addra
-            .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
-            .douta(tree_ram_dout),  // output wire [31 : 0] douta
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==4) begin
+    //         dtp_bram_paper_4 tree_ram_inst_4 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
 
-                // PS
-            .clkb (bram_clk_ps),    // input wire clkb
-            .rstb (bram_rst_ps),    // input wire rstb
-            .enb  (bram_en_ps),      // input wire enb
-            .web  (|bram_we_ps),      // input wire [0 : 0] web
-            .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
-            .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
-            .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
-            );
-        end
-    endgenerate
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==5) begin
+    //         dtp_bram_paper_5 tree_ram_inst_5 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==6) begin
+    //         dtp_bram_paper_6 tree_ram_inst_6 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==7) begin
+    //         dtp_bram_paper_7 tree_ram_inst_7 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==8) begin
+    //         dtp_bram_paper_8 tree_ram_inst_8 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    //     else if(DTP_IDX==9) begin
+    //         dtp_bram_paper_9 tree_ram_inst_9 (
+    //             // DTP
+    //         .clka (clk),    // input wire clka
+    //         .rsta (1'b0),    // input wire rsta
+    //         .ena  (1'b1),      // input wire ena
+    //         .wea  (1'b0),      // input wire [0 : 0] wea
+    //         .addra(bram_addr),  // input wire [13 : 0] addra
+    //         .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    //         .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+    //             // PS
+    //         .clkb (bram_clk_ps),    // input wire clkb
+    //         .rstb (bram_rst_ps),    // input wire rstb
+    //         .enb  (bram_en_ps),      // input wire enb
+    //         .web  (|bram_we_ps),      // input wire [0 : 0] web
+    //         .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    //         .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    //         .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    //         );
+    //     end
+    // endgenerate
+
+    dtp_bram_paper tree_ram_inst_0 (
+        // DTP
+    .clka (clk),    // input wire clka
+    .rsta (1'b0),    // input wire rsta
+    .ena  (1'b1),      // input wire ena
+    .wea  (1'b0),      // input wire [0 : 0] wea
+    .addra(bram_addr),  // input wire [13 : 0] addra
+    .dina (BRAM_DWIDTH'('d0)),    // input wire [31 : 0] dina
+    .douta(tree_ram_dout),  // output wire [31 : 0] douta
+
+        // PS
+    .clkb (bram_clk_ps),    // input wire clkb
+    .rstb (bram_rst_ps),    // input wire rstb
+    .enb  (bram_en_ps),      // input wire enb
+    .web  (|bram_we_ps),      // input wire [0 : 0] web
+    .addrb(bram_addr_ps[BRAM_AWIDTH+2-1 : 2]),  // input wire [13 : 0] addrb
+    .dinb (bram_din_ps[BRAM_DWIDTH-1:0]),    // input wire [31 : 0] dinb
+    .doutb(bram_dout_ps)  // output wire [31 : 0] doutb
+    );
 
     // assign bram_dout_ps = 32'(bram_dout_ps_temp);
 
@@ -328,8 +456,8 @@ module dtp_paper #(
 //---------------------------------------------------------------------------------------- 
     assign o_attr_ram_sel = tree_ram_dout[ATTR_IDX +: ATTR_WIDTH];
     
-    // assign o_res_fifo_we = (state_ctrl_pre == STATE_CTRL_INTERNAL) & (tree_ram_dout[LEAF_IDX] & !i_res_fifo_is_full);
-    assign o_res_fifo_we = (state_dtp==STATE_DTP_PROC) & dtp_fin;
+    assign o_res_fifo_we = (state_ctrl_pre == STATE_CTRL_INTERNAL) & (tree_ram_dout[LEAF_IDX] & !i_res_fifo_is_full);
+    // assign o_res_fifo_we = (state_dtp==STATE_DTP_PROC) & dtp_fin;
     assign o_res_fifo_dout = tree_ram_dout[RES_IDX +: RES_WIDTH];
     // assign o_res_fifo_dout = 16'(bram_addr_pipe[(TREE_RAM_STAGES-1)*BRAM_AWIDTH +:BRAM_AWIDTH]); // for debug
     
@@ -430,15 +558,29 @@ module dtp_paper #(
 //----------------------------------------------------------------------------------------
 
 
-    dtp_flt_comp flt_comp_inst_0 (
-    .aclk(clk),                                  // input wire aclk
-    .s_axis_a_tvalid(1'b1),            // input wire s_axis_a_tvalid
-    .s_axis_a_tdata(attr_ram_dout_pipe2),              // input wire [15 : 0] s_axis_a_tdata
-    .s_axis_b_tvalid(1'b1),            // input wire s_axis_b_tvalid
-    .s_axis_b_tdata(tree_ram_dout_pipe2[THSH_IDX +: THSH_WIDTH]),              // input wire [15 : 0] s_axis_b_tdata
-    .m_axis_result_tvalid(),  // output wire m_axis_result_tvalid
-    .m_axis_result_tdata(compare_out)    // output wire [7 : 0] m_axis_result_tdata
-    );
+    generate
+        if (IS_INT) begin
+            comparator_int int_comp_inst_0( // din1 <= din2
+                .clk(clk),
+                .rst_n(rst_n),
+                .din1(24'(attr_ram_dout_pipe2)),
+                .din2(24'(tree_ram_dout_pipe2[THSH_IDX +: THSH_WIDTH])),
+                .comp_out(compare_out)
+            );
+        end else begin
+            dtp_flt_comp flt_comp_inst_0 (
+                .aclk(clk),                                  // input wire aclk
+                .s_axis_a_tvalid(1'b1),            // input wire s_axis_a_tvalid
+                .s_axis_a_tdata(attr_ram_dout_pipe2),              // input wire [15 : 0] s_axis_a_tdata
+                .s_axis_b_tvalid(1'b1),            // input wire s_axis_b_tvalid
+                .s_axis_b_tdata(tree_ram_dout_pipe2[THSH_IDX +: THSH_WIDTH]),              // input wire [15 : 0] s_axis_b_tdata
+                .m_axis_result_tvalid(),  // output wire m_axis_result_tvalid
+                .m_axis_result_tdata(compare_out)    // output wire [7 : 0] m_axis_result_tdata
+            );
+        end
+    endgenerate
+
+
 
     pipeline #(.STAGES(COMPARE_STAGES), .DWIDTH(BRAM_AWIDTH), .RST_VAL(BRAM_AWIDTH'('d0))) 
         left_child_pipe_inst_0
@@ -449,21 +591,21 @@ module dtp_paper #(
         .out_data_lst(left_child_addr)
         );
 
-    logic [15 : 0] right_child_addr_temp;
-    logic [15 : 0] next_tree_addr_temp;
+    logic [ADDER_WIDTH-1 : 0] right_child_addr_temp;
+    logic [ADDER_WIDTH-1 : 0] next_tree_addr_temp;
     dtp_int_add_paper right_child_adder (
-    .A(16'(tree_ram_dout_pipe2[RCHLD_IDX +: RCHLD_WIDTH])),      // input wire [15 : 0] A
-    .B(16'(bram_addr_add_1_pipe2)),      // input wire [15 : 0] B
+    .A(ADDER_WIDTH'(tree_ram_dout_pipe2[RCHLD_IDX +: RCHLD_WIDTH])),      // input wire [ADDER_WIDTH-1 : 0] A
+    .B(ADDER_WIDTH'(bram_addr_add_1_pipe2)),      // input wire [ADDER_WIDTH-1 : 0] B
     .CLK(clk),  // input wire CLK
-    .S(right_child_addr_temp)      // output wire [15 : 0] S
+    .S(right_child_addr_temp)      // output wire [ADDER_WIDTH-1 : 0] S
     );
     assign right_child_addr = BRAM_AWIDTH'(right_child_addr_temp);
 
     dtp_int_add_paper next_tree_adder (
-    .A(16'(tree_addr_mux_a_pipe2)),      // input wire [15 : 0] A
-    .B(16'(tree_addr_mux_b_pipe2)),      // input wire [15 : 0] B
+    .A(ADDER_WIDTH'(tree_addr_mux_a_pipe2)),      // input wire [ADDER_WIDTH-1 : 0] A
+    .B(ADDER_WIDTH'(tree_addr_mux_b_pipe2)),      // input wire [ADDER_WIDTH-1 : 0] B
     .CLK(clk),  // input wire CLK
-    .S(next_tree_addr_temp)      // output wire [15 : 0] S
+    .S(next_tree_addr_temp)      // output wire [ADDER_WIDTH-1 : 0] S
     );
     assign next_tree_addr = BRAM_AWIDTH'(next_tree_addr_temp);
 

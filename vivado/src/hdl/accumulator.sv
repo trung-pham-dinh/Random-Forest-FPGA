@@ -26,6 +26,14 @@ module accumulator #(
     ,output [FIFO_WIDTH-1:0]          o_rgs_accum_reg
     ,output                           o_rgs_accum_reg_vld // corresponding to a regression register, active as a pulse when this register is updated
 );
+
+
+    generate
+        for (genvar i = 0; i < N_LABELS; i=i+1) begin
+            fifo fifo_inst(.in_data(i_in_fifo_rear[i*FIFO_WIDTH +: FIFO_WIDTH]));
+        end
+    endgenerate
+
 endmodule
 
 
