@@ -1,0 +1,8 @@
+# Random-Forest-FPGA
+Trung Pham Dinh, Cuong Pham-Quoc, Tran Ngoc Thinh, Binh Kieu Do Nguyen, Pham Cong Kha
+
+In recent years, machine learning algorithms have been used in many areas, from high-performance to edge computing. As one of the most attractive machine learning algorithms, random forest is widely used in many fields. However, the random forest algorithm is computational and resource intensive, especially for large datasets. Therefore, it is not widely used for IoT applications. This paper proposes a flexible and efficient FPGA-based architecture for random forest targeting edge computing platforms where resources and computing power are limited. The architecture allows the number of decision trees in the random forest to be reconfigured for a particular platform. To improve the system’s performance based on this architecture, we design a pipeline decision tree processor to compute decision trees that are the main components of the random forest algorithm. Although we target and build our experiments with FPGA-based edge computing platforms, the Kria KV260 and PYNQ-Z2, our system achieves throughput speed-ups by up to 28.37× and 13.11× when compared to an Intel core i7 processor, respectively. Furthermore, our system in the two edge computing platforms is energy-efficiency also when it consumes 3.721 µJPS (µ-joule per sample) and 3.328 µJPS for the PYNQ-Z2 and Kria KV260 platforms, respectively.
+
+Keywords: Random Forest, FPGA, SoC, Hardware Acceleration, IP core, Edge Computing
+
+Our paper is accepted by [Journal of Internet of Things](https://doi.org/10.1016/j.iot.2023.100813)
